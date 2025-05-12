@@ -154,17 +154,21 @@ class TimestepEmbedding(nn.Module):
         self.embedding_dim = embedding_dim
         self.max_positions = max_positions
         
-        # Projection layer if needed
-        if projection_dim is not None and projection_dim != embedding_dim:
-            self.projection = nn.Sequential(
-                nn.Linear(embedding_dim, projection_dim),
-                nn.SiLU(),
-                nn.Linear(projection_dim, projection_dim)
-            )
-            self.output_dim = projection_dim
-        else:
-            self.projection = nn.Identity()
-            self.output_dim = embedding_dim
+        # Default to using embedding_dim if no projection_dim is specified
+        # Default to using embedding_dim if no projection_dim is specified
+        if projection_dim is None:
+            projection_dim = embedding_dim
+        
+        # For consistency, ensure embedding always projects to the expected dimension
+        # Double projection approach to ensure proper dimensionality transformation
+        self.projection = nn.Sequential(
+            nn.Linear(embedding_dim, projection_dim),
+            nn.SiLU(),
+            nn.Linear(projection_dim, projection_dim)
+        )
+        
+        # Store the output dimension for clarity and reference
+        self.output_dim = projection_dim
     
     def forward(self, timesteps: torch.Tensor) -> torch.Tensor:
         """
@@ -178,18 +182,24 @@ class TimestepEmbedding(nn.Module):
         """
         # Create sinusoidal timestep embeddings
         half_dim = self.embedding_dim // 2
-        emb = math.log(self.max_positions) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, device=timesteps.device) * -emb)
+        emb_scale = math.log(self.max_positions) / (half_dim - 1)
+        emb_range = torch.exp(torch.arange(half_dim, device=timesteps.device) * -emb_scale)
         
         # Create the actual embeddings
-        emb = timesteps[:, None].float() * emb[None, :]
+        emb = timesteps[:, None].float() * emb_range[None, :]
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
         
         # Handle odd dimensions
         if self.embedding_dim % 2 == 1:
             emb = torch.cat([emb, torch.zeros_like(emb[:, :1])], dim=1)
         
-        # Apply projection if needed
-        emb = self.projection(emb)
+        # Apply projection to get the final dimension
+        projected_emb = self.projection(emb)
+        
+        # Verify the output dimension is as expected
+        assert projected_emb.shape[-1] == self.output_dim, \
+            f"TimestepEmbedding output has shape {projected_emb.shape}, expected [..., {self.output_dim}]"
+        
+        return projected_emb
         
         return emb

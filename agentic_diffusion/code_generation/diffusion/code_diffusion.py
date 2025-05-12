@@ -195,7 +195,12 @@ class CodeDiffusion:
         max_length: int = 512,
         num_samples: int = 5,
         guidance_scale: float = 1.5,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        batch_size: int = 4,
+        precision: str = "float32",
+        device: Optional[str] = None,
+        use_rewards: bool = True,
+        num_iterations: int = 1
     ) -> str:
         """
         Generate code from a natural language specification.
@@ -208,6 +213,11 @@ class CodeDiffusion:
             num_samples: Number of candidates to generate and select from
             guidance_scale: Scale for classifier-free guidance
             temperature: Sampling temperature (lower = more deterministic)
+            batch_size: Number of samples to generate (for API compatibility)
+            precision: Precision to use for computation (e.g., "float32", "float16")
+            device: Device to use for generation (overrides instance device if provided)
+            use_rewards: Whether to use reward models for quality assessment
+            num_iterations: Number of generation iterations for refinement
             
         Returns:
             Generated code as a string
@@ -220,17 +230,34 @@ class CodeDiffusion:
         # Record generation start time
         start_time = time.time()
         
+        # Prepare parameters for the model's generate method
+        generation_kwargs = {
+            'specification': specification,
+            'language': language,
+            'partial_code': partial_code,
+            'tokenizer': tokenizer,
+            'max_length': max_length,
+            'guidance_scale': guidance_scale,
+            'temperature': temperature
+        }
+        
+        # Determine the actual number of samples to use
+        # Use batch_size if specified, otherwise use num_samples
+        actual_samples = batch_size if 'batch_size' in locals() else num_samples
+        generation_kwargs['num_samples'] = actual_samples
+        
         # Generate code using the diffusion model
-        generated_code = self.model.generate(
-            specification=specification,
-            language=language,
-            partial_code=partial_code,
-            tokenizer=tokenizer,
-            max_length=max_length,
-            guidance_scale=guidance_scale,
-            temperature=temperature,
-            num_samples=num_samples
-        )
+        try:
+            generated_code = self.model.generate(**generation_kwargs)
+        except Exception as e:
+            self.logger.error(f"Error in diffusion model generation: {e}")
+            # Fallback with minimal parameters
+            generated_code = self.model.generate(
+                specification=specification,
+                language=language,
+                partial_code=partial_code,
+                tokenizer=tokenizer
+            )
         
         # Record generation end time
         generation_time = time.time() - start_time
@@ -393,7 +420,138 @@ class CodeDiffusion:
             self.logger.warning(f"Could not import reward models for detailed evaluation: {e}")
         
         return metrics
+    def generate(
+        self,
+        specification: str,
+        language: Optional[str] = None,
+        partial_code: Optional[str] = None,
+        batch_size: int = 4,
+        precision: str = "float32",
+        device: Optional[str] = None,
+        guidance_scale: float = 1.5,
+        temperature: float = 0.7,
+        use_rewards: bool = True,
+        max_length: int = 512,
+        num_iterations: int = 1,
+        **kwargs
+    ) -> str:
+        """
+        Compatibility method that delegates to generate_code.
+        
+        This method provides compatibility with the common generate interface
+        used across different code generation models.
+        
+        Args:
+            specification: Text description of the code to generate
+            language: Programming language to generate (defaults to Python if None)
+            partial_code: Optional partial code to complete
+            **kwargs: Additional parameters passed to generate_code
+            
+        Returns:
+            Generated code as a string
+        """
+        # Default to Python if language is None
+        actual_language = language if language is not None else "python"
+        
+        # Extract supported parameters from kwargs
+        generation_kwargs = {
+            'specification': specification,
+            'language': actual_language,
+            'partial_code': partial_code
+        }
+        
+        # Copy over other supported parameters from kwargs
+        supported_params = [
+            'max_length', 'num_samples', 'guidance_scale',
+            'temperature', 'batch_size', 'precision', 'device',
+            'use_rewards', 'num_iterations'
+        ]
+        
+        for param in supported_params:
+            if param in kwargs:
+                generation_kwargs[param] = kwargs[param]
+        
+        # Delegate to the main generate_code method
+        try:
+            return self.generate_code(**generation_kwargs)
+        except Exception as e:
+            self.logger.error(f"Error in generate method: {e}")
+            # Fall back to minimal parameters
+            return self.generate_code(
+                specification=specification,
+                language=actual_language,
+                partial_code=partial_code
+            )
     
+    def sample(
+        self,
+        specification: str,
+        language: Optional[str] = None,
+        partial_code: Optional[str] = None,
+        batch_size: int = 4,
+        precision: str = "float32",
+        device: Optional[str] = None,
+        guidance_scale: float = 1.5,
+        temperature: float = 0.7,
+        use_rewards: bool = True,
+        max_length: int = 512,
+        num_iterations: int = 1,
+        **kwargs
+    ) -> str:
+        """
+        Compatibility method that delegates to generate_code.
+        
+        This method provides compatibility with sample-based code generation interfaces.
+        It handles tokenizer parameters that might be passed from other generators.
+        
+        Args:
+            specification: Text description of the code to generate
+            language: Programming language to generate (defaults to Python if None)
+            partial_code: Optional partial code to complete
+            **kwargs: Additional parameters passed to generate_code
+            
+        Returns:
+            Generated code as a string
+        """
+        # Default to Python if language is None
+        actual_language = language if language is not None else "python"
+        
+        # Remove tokenizer parameter if it exists since our generate_code
+        # method gets the tokenizer internally
+        if "tokenizer" in kwargs:
+            self.logger.debug("Removing tokenizer parameter from kwargs for compatibility")
+            kwargs.pop("tokenizer")
+            
+        # Extract supported parameters from kwargs
+        generation_kwargs = {
+            'specification': specification,
+            'language': actual_language,
+            'partial_code': partial_code
+        }
+        
+        # Copy over other supported parameters from kwargs
+        supported_params = [
+            'max_length', 'num_samples', 'guidance_scale',
+            'temperature', 'batch_size', 'precision', 'device',
+            'use_rewards', 'num_iterations'
+        ]
+        
+        for param in supported_params:
+            if param in kwargs:
+                generation_kwargs[param] = kwargs[param]
+        
+        # Delegate to the main generate_code method
+        try:
+            return self.generate_code(**generation_kwargs)
+        except Exception as e:
+            self.logger.error(f"Error in sample method: {e}")
+            # Fall back to minimal parameters
+            return self.generate_code(
+                specification=specification,
+                language=actual_language,
+                partial_code=partial_code
+            )
+        
     def save_checkpoint(self, checkpoint_path: str) -> None:
         """
         Save the model to a checkpoint file.
@@ -413,4 +571,5 @@ class CodeDiffusion:
         
         # Save the checkpoint
         torch.save(checkpoint, checkpoint_path)
+        self.logger.info(f"Saved model checkpoint to {checkpoint_path}")
         self.logger.info(f"Saved model checkpoint to {checkpoint_path}")

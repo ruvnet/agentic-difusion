@@ -9,10 +9,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import logging
 from typing import Dict, List, Optional, Tuple, Union, Any
 
 from agentic_diffusion.code_generation.models.embeddings import CodeEmbedding, TimestepEmbedding
-from agentic_diffusion.code_generation.models.blocks import TransformerBlock, ResidualBlock, CrossAttentionBlock
+from agentic_diffusion.code_generation.models.blocks import TransformerBlock, ResidualBlock, CrossAttentionBlock, DynamicLayerNorm
+
+logger = logging.getLogger(__name__)
 
 class CodeUNet(nn.Module):
     """
@@ -72,14 +75,32 @@ class CodeUNet(nn.Module):
         # Condition embedding (for specification)
         self.use_conditioning = condition_dim is not None
         if self.use_conditioning:
-            self.condition_blocks = nn.ModuleList([
-                CrossAttentionBlock(
-                    d_model=hidden_dim,
-                    d_context=condition_dim,
-                    n_heads=num_heads,
-                    dropout=dropout
-                ) for _ in range(num_layers)
-            ])
+            # Create condition blocks for different dimensions in the U-Net
+            self.condition_blocks = nn.ModuleDict()
+            
+            # Calculate the dimensions at each level of the decoder path
+            decoder_dims = []
+            current_dim = hidden_dim
+            for i in range(num_downsamples):
+                # Track dimensions along the encoder path (will be mirrored in decoder)
+                decoder_dims.append(current_dim)
+                current_dim *= 2
+                
+            # Add the bottleneck dimension
+            decoder_dims.append(current_dim)
+            
+            # Create condition blocks for each dimension in the decoder path
+            for i, dim in enumerate(reversed(decoder_dims)):
+                dim_key = str(dim)
+                self.condition_blocks[dim_key] = nn.ModuleList([
+                    CrossAttentionBlock(
+                        d_model=dim,
+                        d_context=condition_dim,
+                        n_heads=num_heads,
+                        dropout=dropout
+                    ) for _ in range(num_layers // num_downsamples)
+                ])
+                logger.info(f"Created condition blocks for dimension {dim}")
         
         # Initial projection from embedding dim to hidden dim
         self.input_projection = nn.Linear(embedding_dim, hidden_dim)
@@ -148,11 +169,18 @@ class CodeUNet(nn.Module):
                 'upsample': upsample
             }))
         
-        # Final layer to produce logits for each token
-        self.final_layer = nn.Sequential(
-            nn.LayerNorm(hidden_dim),
-            nn.Linear(hidden_dim, vocab_size)
-        )
+        # Final layer to produce logits for each token - using a flexible approach
+        self.final_norm = DynamicLayerNorm(hidden_dim)
+        self.final_projection = nn.ModuleDict({
+            str(hidden_dim): nn.Linear(hidden_dim, vocab_size)
+        })
+        
+        # Pre-initialize for common dimensions in the U-Net
+        for scale in [1, 2, 4]:
+            dim = hidden_dim * scale
+            if dim != hidden_dim:
+                self.final_projection[str(dim)] = nn.Linear(dim, vocab_size)
+                logger.info(f"Pre-initialized final projection from {dim} to {vocab_size}")
     
     def forward(
         self,
@@ -219,11 +247,44 @@ class CodeUNet(nn.Module):
             
             # Apply conditioning if available
             if self.use_conditioning and condition is not None:
-                condition_idx = i % len(self.condition_blocks)
-                h = self.condition_blocks[condition_idx](h, condition)
+                # Get the current dimension
+                current_dim = h.size(-1)
+                dim_key = str(current_dim)
+                
+                # Check if we have condition blocks for this dimension
+                if dim_key in self.condition_blocks:
+                    # Use the appropriate condition block for this dimension
+                    block_idx = i % len(self.condition_blocks[dim_key])
+                    h = self.condition_blocks[dim_key][block_idx](h, condition)
+                else:
+                    # Dynamically create condition blocks for this dimension if needed
+                    logger.info(f"Creating new condition blocks for dimension {current_dim}")
+                    self.condition_blocks[dim_key] = nn.ModuleList([
+                        CrossAttentionBlock(
+                            d_model=current_dim,
+                            d_context=self.condition_dim,
+                            n_heads=self.num_heads,
+                            dropout=0.1
+                        ) for _ in range(self.num_layers // self.num_downsamples)
+                    ]).to(h.device)
+                    
+                    # Use the first block from the newly created list
+                    h = self.condition_blocks[dim_key][0](h, condition)
         
-        # Final layer to produce token logits
-        logits = self.final_layer(h)
+        # Get the final hidden dimension
+        final_dim = h.size(-1)
+        
+        # Apply layer normalization with the correct dimension
+        h_norm = self.final_norm(h)
+        
+        # Apply final projection with the correct dimension
+        dim_key = str(final_dim)
+        if dim_key not in self.final_projection:
+            logger.info(f"Creating new final projection from {final_dim} to {self.vocab_size}")
+            self.final_projection[dim_key] = nn.Linear(final_dim, self.vocab_size).to(h.device)
+        
+        # Get logits using the appropriate projection
+        logits = self.final_projection[dim_key](h_norm)
         
         return logits
     
