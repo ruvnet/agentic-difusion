@@ -1,0 +1,71 @@
+{
+  "name": "code_generation_benchmark",
+  "version": "1.0.0",
+  "description": "Benchmark dataset for code generation tasks",
+  "tasks": [
+    {
+      "id": "1",
+      "specification": "function to calculate fibonacci sequence",
+      "language": "python",
+      "expected_output": [
+        "fibonacci",
+        "sequence",
+        "calculate"
+      ],
+      "complexity": "medium",
+      "category": "algorithms"
+    },
+    {
+      "id": "2",
+      "specification": "create a binary search tree implementation",
+      "language": "python",
+      "expected_output": [
+        "BinarySearchTree",
+        "insert",
+        "search",
+        "traversal"
+      ],
+      "complexity": "medium",
+      "category": "data_structures"
+    },
+    {
+      "id": "3",
+      "specification": "implement a function that sorts an array using quicksort algorithm",
+      "language": "python",
+      "expected_output": [
+        "quicksort",
+        "partition",
+        "sort",
+        "array"
+      ],
+      "complexity": "medium",
+      "category": "algorithms"
+    },
+    {
+      "id": "4",
+      "specification": "create a simple HTTP server that responds with 'Hello, World!'",
+      "language": "python",
+      "expected_output": [
+        "HTTP",
+        "server",
+        "listen",
+        "response"
+      ],
+      "complexity": "medium",
+      "category": "networking"
+    },
+    {
+      "id": "5",
+      "specification": "write a function to check if a string is a palindrome",
+      "language": "python",
+      "expected_output": [
+        "palindrome",
+        "string",
+        "check",
+        "reverse"
+      ],
+      "complexity": "easy",
+      "category": "strings"
+    }
+  ]
+}

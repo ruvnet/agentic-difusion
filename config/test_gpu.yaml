@@ -1,0 +1,43 @@
+# Global settings
+device: cuda
+precision: float16  # Use half-precision for GPU
+seed: 42
+batch_size: 16
+logging_level: INFO
+
+# AdaptDiffuser specific settings
+adaptdiffuser:
+  guidance_scale: 2.5
+  sampling_steps: 50
+  use_ddim: true
+  adaptation_rate: 1e-5
+  quality_threshold: 0.7
+  
+  # Model configuration
+  model:
+    model_channels: 128
+    num_res_blocks: 2
+    attention_resolutions: [1, 2, 4]
+    dropout: 0.1
+    channel_mult: [1, 2, 4, 8]
+    num_heads: 4
+    num_head_channels: 64
+    use_scale_shift_norm: true
+    resblock_updown: true
+  
+  # Noise scheduler configuration
+  noise_scheduler:
+    type: cosine
+    num_timesteps: 100
+    beta_start: 0.0001
+    beta_end: 0.02
+    s: 0.008
+  
+  # Memory configuration for GPU
+  buffer_capacity: 10000
+  multi_task: true
+  adaptive_guidance: true
+  
+  # GPU-specific optimization
+  optimize_memory: true
+  use_amp: true  # Automatic mixed precision

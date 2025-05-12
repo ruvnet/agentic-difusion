@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentic_diffusion_mcp"
+version = "0.1.0"
+description = "An MCP-compatible server implementation"
+readme = "README.md"
+authors = [
+    {name = "rUv", email = "ruv@ruv.net"}
+]
+license = {text = "MIT"}
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "mcp>=1.0.0",
+    "mcp[cli]>=1.0.0",
+    "anyio>=4.5",
+    "starlette>=0.36.0",
+    "uvicorn>=0.27.0",
+]
+
+[project.scripts]
+# Single entry point for server that handles both transports
+agentic_diffusion_mcp-server = "agentic_diffusion_mcp.server.app:main"
+agentic_diffusion_mcp-client = "agentic_diffusion_mcp.client.app:main"
+
+[tool.setuptools.packages.find]
+include = ["agentic_diffusion_mcp*"]
+namespaces = true 

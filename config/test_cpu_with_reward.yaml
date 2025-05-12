@@ -1,0 +1,44 @@
+# Global settings
+device: cpu
+precision: float32
+seed: 42
+batch_size: 4
+logging_level: INFO
+
+# AdaptDiffuser specific settings
+adaptdiffuser:
+  guidance_scale: 1.0
+  sampling_steps: 20  # Reduced steps for faster testing on CPU
+  use_ddim: true      # Use DDIM for faster sampling
+  adaptation_rate: 1e-4
+  quality_threshold: 0.6
+  
+  # Reward model configuration
+  reward_model:
+    type: simple_reward
+    base_reward: 0.6
+    noise_scale: 0.05
+  
+  # Model configuration
+  model:
+    model_channels: 64  # Smaller model for CPU testing
+    num_res_blocks: 1
+    attention_resolutions: []
+    dropout: 0.0
+    channel_mult: [1, 2]
+    num_heads: 2
+    num_head_channels: 32
+    use_scale_shift_norm: true
+    resblock_updown: true
+  
+  # Noise scheduler configuration
+  noise_scheduler:
+    type: cosine
+    num_timesteps: 50  # Fewer timesteps for CPU testing
+    beta_start: 0.0001
+    beta_end: 0.02
+    s: 0.008
+    
+  # Memory buffer settings
+  buffer_capacity: 1000
+  multi_task: false  # Disable multi-task for CPU testing

@@ -1,0 +1,106 @@
+# Development configuration for Agentic Diffusion
+
+# General configuration
+environment: development
+debug: true
+logging:
+  level: DEBUG
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: logs/agentic_diffusion.log
+
+# Core diffusion model configuration
+diffusion:
+  model_type: conditional
+  num_diffusion_steps: 50
+  device: auto  # 'auto' will use CUDA if available, otherwise CPU
+  precision: float32  # Options: float32, float16, bfloat16
+  noise_schedule:
+    type: cosine  # Options: linear, cosine, quadratic
+    beta_start: 0.0001
+    beta_end: 0.02
+    s: 0.008  # For cosine schedule
+  denoiser:
+    embedding_dim: 512
+    hidden_dim: 1024
+    num_layers: 12
+    num_heads: 8
+    dropout: 0.1
+  trajectory_buffer:
+    capacity: 1000
+    priority_exponent: 0.6
+    priority_weight: 0.4
+
+# Adaptation configuration
+adaptation:
+  mechanism: hybrid  # Options: gradient, memory, hybrid
+  learning_rate: 1e-5
+  num_steps: 1000
+  batch_size: 16
+  patience: 10
+  early_stopping: true
+  gradient:
+    optimizer: adam
+    weight_decay: 1e-6
+    gradient_clip: 1.0
+  memory:
+    max_examples: 100
+    temperature: 0.8
+    update_interval: 5
+
+# Code generation configuration
+code_generation:
+  languages:
+    - python
+    - javascript
+    - java
+    - go
+  max_sequence_length: 512
+  token_vocabulary_size: 50000
+  syntax_guidance_weight: 0.7
+  prompt_guidance_weight: 0.9
+  quality_guidance_weight: 0.5
+  tokenizer:
+    model_path: resources/code_tokenizer
+    cache_dir: .cache/tokenizers
+
+# API configuration
+api:
+  host: localhost
+  port: 8000
+  workers: 4
+  timeout: 30
+  rate_limit: 100
+  cors_origins:
+    - http://localhost:3000
+    - http://localhost:8080
+
+# Testing configuration
+testing:
+  coverage_target: 0.9
+  parallel: true
+  test_types:
+    - unit
+    - integration
+    - system
+  fixtures_path: agentic_diffusion/tests/fixtures
+  data_path: agentic_diffusion/tests/data
+
+# Infrastructure configuration
+infrastructure:
+  uv:
+    cache_dir: .cache/uv
+    use_venv: true
+    venv_path: .venv
+  training:
+    checkpoint_dir: checkpoints
+    log_dir: logs/training
+    evaluation_interval: 100
+    save_interval: 500
+  deployment:
+    model_registry: models
+    versioning: semantic  # Options: semantic, timestamp
+    retention_policy: last_5  # Keep last 5 versions
+  monitoring:
+    metrics_port: 8001
+    log_level: INFO
+    profile: false

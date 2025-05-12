@@ -1,0 +1,48 @@
+adaptdiffuser:
+  adaptation_rate: 1e-4
+  buffer_capacity: 1000
+  enable_improvement: true
+  guidance_scale: 1.0
+  model:
+    attention_resolutions:
+    - 1
+    - 2
+    - 4
+    channel_mult:
+    - 1
+    - 2
+    - 4
+    dropout: 0.1
+    model_channels: 64
+    num_head_channels: 32
+    num_heads: 2
+    num_res_blocks: 2
+    resblock_updown: true
+    use_scale_shift_norm: true
+  multi_task: true
+  noise_scheduler:
+    beta_end: 0.02
+    beta_start: 0.0001
+    num_timesteps: 1000
+    s: 0.008
+    type: cosine
+  quality_threshold: 0.6
+  reward_model:
+    improvement_rate: 0.05
+    initial_reward: 0.5
+    type: test
+  sampling_steps: 20
+  task_embedding:
+    embedding_dim: 128
+    seed: 42
+    type: simple
+  use_ddim: true
+  use_reward_guidance: true
+adaptdiffuser_paths:
+  reward_model: agentic_diffusion.core.reward_functions
+  task_embedding_model: agentic_diffusion.adaptation.task_embeddings
+batch_size: 4
+device: cpu
+logging_level: INFO
+precision: float32
+seed: 42

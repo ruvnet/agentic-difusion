@@ -1,0 +1,91 @@
+# AdaptDiffuser GPU Configuration
+
+# Hardware settings
+device: "cuda"  # Force GPU usage
+precision: "float16"  # Use half precision for better GPU performance
+
+# Model settings
+model:
+  img_size: 32  # Size of trajectory representation
+  channels: 3   # Number of channels in trajectory representation
+  model_channels: 128
+  channel_mult: [1, 2, 4, 8]
+  attention_resolutions: [16, 8]
+  num_res_blocks: 2
+  dropout: 0.1
+  use_scale_shift_norm: true
+  resblock_updown: true
+  num_heads: 4
+  num_head_channels: 64
+  use_checkpoint: true  # Use gradient checkpointing to save GPU memory
+
+# Diffusion settings
+guidance_scale: 3.0
+use_ddim: true
+sampling_steps: 50
+
+# Noise scheduler settings
+noise_scheduler:
+  type: "cosine"
+  num_timesteps: 1000
+  beta_start: 0.0001
+  beta_end: 0.02
+  s: 0.008
+
+# Buffer settings
+buffer_capacity: 10000
+prioritized_replay: true
+
+# Adaptation settings
+adaptation_rate: 1.0e-5
+adaptation_steps: 10
+quality_threshold: 0.7
+
+# Task embedding settings
+task_embedding:
+  embedding_dim: 64
+  embedding_model: "default"
+  cache_capacity: 1000
+
+# Multi-task settings
+multi_task: false
+task_similarity_threshold: 0.7
+
+# Self-improvement settings
+self_improvement:
+  iterations: 3
+  trajectories_per_iter: 50
+  quality_threshold: 0.7
+  synthetic_expert_ratio: 0.5
+
+# Discriminator settings
+discriminator:
+  hidden_dim: 128
+  n_layers: 3
+  dropout: 0.1
+
+# Synthetic expert settings
+synthetic_expert:
+  guidance_scale: 5.0
+  sampling_steps: 100
+  use_ddim: true
+  diversity_penalty: 0.1
+
+# Checkpoint settings
+checkpoint_dir: "./checkpoints/adaptdiffuser_gpu"
+save_frequency: 5
+
+# Logging settings
+logging:
+  level: "INFO"
+  log_to_file: false
+  log_file: "adaptdiffuser_gpu.log"
+  log_metrics: true
+
+# Advanced settings
+advanced:
+  adaptive_guidance: true
+  guidance_min_step_percent: 0.1
+  guidance_max_step_percent: 0.9
+  ema_rate: 0.999
+  selection_strategy: "hybrid"

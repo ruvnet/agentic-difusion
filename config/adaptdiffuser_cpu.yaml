@@ -1,0 +1,91 @@
+# AdaptDiffuser CPU Configuration
+
+# Hardware settings
+device: "cpu"  # Force CPU usage
+precision: "float32"  # Use full precision for CPU
+
+# Model settings
+model:
+  img_size: 32  # Size of trajectory representation
+  channels: 3   # Number of channels in trajectory representation
+  model_channels: 64  # Reduced for CPU performance
+  channel_mult: [1, 2, 2, 4]  # Smaller network for CPU
+  attention_resolutions: [16, 8]
+  num_res_blocks: 1  # Reduced for CPU
+  dropout: 0.1
+  use_scale_shift_norm: true
+  resblock_updown: true
+  num_heads: 2  # Reduced for CPU
+  num_head_channels: 32  # Reduced for CPU
+  use_checkpoint: false  # No need for gradient checkpointing on CPU
+
+# Diffusion settings
+guidance_scale: 2.0  # Reduced for testing
+use_ddim: true       # Use DDIM sampling (faster)
+sampling_steps: 20   # Reduced steps for faster testing
+
+# Noise scheduler settings
+noise_scheduler:
+  type: "cosine"
+  num_timesteps: 100  # Reduced for CPU testing
+  beta_start: 0.0001
+  beta_end: 0.02
+  s: 0.008
+
+# Buffer settings
+buffer_capacity: 1000  # Reduced for CPU
+prioritized_replay: false  # Simplify for testing
+
+# Adaptation settings
+adaptation_rate: 1.0e-4  # Faster learning for testing
+adaptation_steps: 5      # Fewer steps for testing
+quality_threshold: 0.6   # Lower threshold for testing
+
+# Task embedding settings
+task_embedding:
+  embedding_dim: 32  # Reduced dimension for CPU
+  embedding_model: "default"
+  cache_capacity: 100  # Reduced for testing
+
+# Multi-task settings
+multi_task: false
+task_similarity_threshold: 0.7
+
+# Self-improvement settings
+self_improvement:
+  iterations: 2  # Reduced for testing
+  trajectories_per_iter: 10  # Reduced for testing
+  quality_threshold: 0.6
+  synthetic_expert_ratio: 0.5
+
+# Discriminator settings
+discriminator:
+  hidden_dim: 64  # Reduced for CPU
+  n_layers: 2     # Reduced for CPU
+  dropout: 0.1
+
+# Synthetic expert settings
+synthetic_expert:
+  guidance_scale: 3.0  # Reduced for testing
+  sampling_steps: 20   # Reduced for testing
+  use_ddim: true
+  diversity_penalty: 0.1
+
+# Checkpoint settings
+checkpoint_dir: "./checkpoints/adaptdiffuser_cpu"
+save_frequency: 5
+
+# Logging settings
+logging:
+  level: "INFO"
+  log_to_file: false
+  log_file: "adaptdiffuser_cpu.log"
+  log_metrics: true
+
+# Advanced settings
+advanced:
+  adaptive_guidance: true
+  guidance_min_step_percent: 0.1
+  guidance_max_step_percent: 0.9
+  ema_rate: 0.99  # Faster EMA for testing
+  selection_strategy: "hybrid"

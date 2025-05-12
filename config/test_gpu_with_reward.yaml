@@ -1,0 +1,44 @@
+# Global settings
+device: cuda
+precision: float32
+seed: 42
+batch_size: 16
+logging_level: INFO
+
+# AdaptDiffuser specific settings
+adaptdiffuser:
+  guidance_scale: 1.0
+  sampling_steps: 50
+  use_ddim: true
+  adaptation_rate: 1e-4
+  quality_threshold: 0.6
+  
+  # Reward model configuration
+  reward_model:
+    type: simple_reward
+    base_reward: 0.6
+    noise_scale: 0.05
+  
+  # Model configuration
+  model:
+    model_channels: 128
+    num_res_blocks: 2
+    attention_resolutions: [1, 2, 4]
+    dropout: 0.1
+    channel_mult: [1, 2, 4, 8]
+    num_heads: 4
+    num_head_channels: 64
+    use_scale_shift_norm: true
+    resblock_updown: true
+  
+  # Noise scheduler configuration
+  noise_scheduler:
+    type: cosine
+    num_timesteps: 1000
+    beta_start: 0.0001
+    beta_end: 0.02
+    s: 0.008
+    
+  # Memory buffer settings
+  buffer_capacity: 10000
+  multi_task: true
