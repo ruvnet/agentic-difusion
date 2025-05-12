@@ -249,27 +249,13 @@ class CodeUNet(nn.Module):
             if self.use_conditioning and condition is not None:
                 # Get the current dimension
                 current_dim = h.size(-1)
-                dim_key = str(current_dim)
                 
-                # Check if we have condition blocks for this dimension
-                if dim_key in self.condition_blocks:
-                    # Use the appropriate condition block for this dimension
-                    block_idx = i % len(self.condition_blocks[dim_key])
-                    h = self.condition_blocks[dim_key][block_idx](h, condition)
-                else:
-                    # Dynamically create condition blocks for this dimension if needed
-                    logger.info(f"Creating new condition blocks for dimension {current_dim}")
-                    self.condition_blocks[dim_key] = nn.ModuleList([
-                        CrossAttentionBlock(
-                            d_model=current_dim,
-                            d_context=self.condition_dim,
-                            n_heads=self.num_heads,
-                            dropout=0.1
-                        ) for _ in range(self.num_layers // self.num_downsamples)
-                    ]).to(h.device)
-                    
-                    # Use the first block from the newly created list
-                    h = self.condition_blocks[dim_key][0](h, condition)
+                # Get or create appropriate condition blocks for this dimension
+                condition_blocks = self._get_or_create_condition_block(current_dim, self.condition_dim)
+                
+                # Use the appropriate condition block for this dimension
+                block_idx = i % len(condition_blocks)
+                h = condition_blocks[block_idx](h, condition)
         
         # Get the final hidden dimension
         final_dim = h.size(-1)
@@ -296,6 +282,34 @@ class CodeUNet(nn.Module):
             Number of parameters
         """
         return sum(p.numel() for p in self.parameters())
+        
+    def _get_or_create_condition_block(self, dimension: int, condition_dim: int) -> nn.Module:
+        """
+        Get an existing condition block for the given dimension or create a new one.
+        
+        Args:
+            dimension: Hidden dimension for the condition block
+            condition_dim: Dimension of the condition embedding
+            
+        Returns:
+            Appropriate condition block for the dimension
+        """
+        dim_key = str(dimension)
+        
+        # Create new condition blocks for this dimension if needed
+        if dim_key not in self.condition_blocks:
+            logger.info(f"Creating new condition blocks for dimension {dimension}")
+            self.condition_blocks[dim_key] = nn.ModuleList([
+                CrossAttentionBlock(
+                    d_model=dimension,
+                    d_context=self.condition_dim,
+                    n_heads=self.num_heads,
+                    dropout=0.1
+                ) for _ in range(self.num_layers // self.num_downsamples)
+            ]).to(next(self.parameters()).device)
+        
+        return self.condition_blocks[dim_key]
+
 
 class CodeClassifierFreeGuidanceUNet(nn.Module):
     """

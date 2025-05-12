@@ -247,18 +247,34 @@ class CodeDiffusion:
         generation_kwargs['num_samples'] = actual_samples
         
         # Generate code using the diffusion model
+        # Generate code using the diffusion model
         try:
             generated_code = self.model.generate(**generation_kwargs)
         except Exception as e:
             self.logger.error(f"Error in diffusion model generation: {e}")
+            
+            # Check specifically for dimension mismatch errors
+            if isinstance(e, AssertionError) and "embedding dimension" in str(e):
+                self.logger.error("Detected dimension mismatch in UNet model. This is likely due to incompatible dimensions in condition blocks.")
+                raise RuntimeError("Dimension mismatch in diffusion model. Please ensure the CodeUNet has been updated to handle dynamic dimensions.") from e
+            
+            # Check for other common issues
+            if "CUDA out of memory" in str(e):
+                self.logger.error("CUDA out of memory error. Try reducing batch_size or max_length.")
+                raise RuntimeError("GPU memory exhausted during code generation. Please reduce batch size or model parameters.") from e
+                
             # Fallback with minimal parameters
-            generated_code = self.model.generate(
-                specification=specification,
-                language=language,
-                partial_code=partial_code,
-                tokenizer=tokenizer
-            )
-        
+            try:
+                self.logger.info("Attempting fallback with minimal parameters...")
+                generated_code = self.model.generate(
+                    specification=specification,
+                    language=language,
+                    partial_code=partial_code,
+                    tokenizer=tokenizer
+                )
+            except Exception as fallback_error:
+                self.logger.error(f"Fallback generation also failed: {fallback_error}")
+                raise RuntimeError("Diffusion model failed to generate valid code after fallback attempt") from fallback_error
         # Record generation end time
         generation_time = time.time() - start_time
         
@@ -476,12 +492,23 @@ class CodeDiffusion:
             return self.generate_code(**generation_kwargs)
         except Exception as e:
             self.logger.error(f"Error in generate method: {e}")
-            # Fall back to minimal parameters
-            return self.generate_code(
-                specification=specification,
-                language=actual_language,
-                partial_code=partial_code
-            )
+            
+            # Check for specific error types to provide better error messages
+            if isinstance(e, AssertionError) and "embedding dimension" in str(e):
+                self.logger.error("Detected dimension mismatch in UNet model. This is likely due to incompatible dimensions in condition blocks.")
+                raise RuntimeError("Dimension mismatch in diffusion model. Please ensure the CodeUNet has been updated to handle dynamic dimensions.") from e
+            
+            # Try one more time with minimal parameters if the error isn't a dimension mismatch
+            try:
+                self.logger.info("Attempting fallback with minimal parameters...")
+                return self.generate_code(
+                    specification=specification,
+                    language=actual_language,
+                    partial_code=partial_code
+                )
+            except Exception as fallback_error:
+                self.logger.error(f"Fallback generation also failed: {fallback_error}")
+                raise RuntimeError("Diffusion model failed to generate valid code after fallback attempt") from fallback_error
     
     def sample(
         self,
@@ -541,17 +568,28 @@ class CodeDiffusion:
                 generation_kwargs[param] = kwargs[param]
         
         # Delegate to the main generate_code method
+        # Delegate to the main generate_code method
         try:
             return self.generate_code(**generation_kwargs)
         except Exception as e:
             self.logger.error(f"Error in sample method: {e}")
-            # Fall back to minimal parameters
-            return self.generate_code(
-                specification=specification,
-                language=actual_language,
-                partial_code=partial_code
-            )
-        
+            
+            # Check for specific error types to provide better error messages
+            if isinstance(e, AssertionError) and "embedding dimension" in str(e):
+                self.logger.error("Detected dimension mismatch in UNet model. This is likely due to incompatible dimensions in condition blocks.")
+                raise RuntimeError("Dimension mismatch in diffusion model. Please ensure the CodeUNet has been updated to handle dynamic dimensions.") from e
+            
+            # Try one more time with minimal parameters if the error isn't a dimension mismatch
+            try:
+                self.logger.info("Attempting fallback with minimal parameters...")
+                return self.generate_code(
+                    specification=specification,
+                    language=actual_language,
+                    partial_code=partial_code
+                )
+            except Exception as fallback_error:
+                self.logger.error(f"Fallback generation also failed: {fallback_error}")
+                raise RuntimeError("Diffusion model failed to generate valid code after fallback attempt") from fallback_error
     def save_checkpoint(self, checkpoint_path: str) -> None:
         """
         Save the model to a checkpoint file.

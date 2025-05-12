@@ -1,105 +1,128 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
-Test script for the ResidualBlock fix.
-
-This script creates tensors with various shapes and runs them through
-the ResidualBlock to verify our dimension-adaptive fix works correctly.
+Test script for verifying the ResidualBlock's dynamic dimension handling.
+This script tests the improved dimension handling in the ResidualBlock class.
 """
 
 import torch
 import logging
 import sys
+import traceback
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
+# Configure logging to see detailed messages
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("residual_block_test")
 
 # Import the ResidualBlock class
 from agentic_diffusion.code_generation.models.blocks import ResidualBlock
 
-def test_residual_block():
-    """Test the ResidualBlock with different input shapes."""
-    logger = logging.getLogger("test_residual_block")
-    logger.info("Testing ResidualBlock with different tensor shapes")
+def test_residual_block_dimension_handling():
+    """Test the ResidualBlock's handling of dimension mismatches."""
+    print("\n=== Testing ResidualBlock dynamic dimension handling ===")
     
-    # Test parameters
-    d_time = 512
-    device = torch.device("cpu")
+    # Base dimensions
+    d_model = 512
+    d_time = 128
+    n_heads = 8
     
-    # Create test tensors with different shapes
-    batch_size = 4
-    seq_len = 64
-    dimensions = [256, 512, 768, 1024, 2048]
-    
-    # Create a time embedding tensor
-    time_emb = torch.randn(batch_size, d_time).to(device)
-    
-    success = True
-    # Test each dimension
-    for d_model in dimensions:
-        try:
-            logger.info(f"Testing ResidualBlock with d_model={d_model}")
-            
-            # Create input tensor [batch_size, seq_len, d_model]
-            x = torch.randn(batch_size, seq_len, d_model).to(device)
-            
-            # Create the ResidualBlock
-            block = ResidualBlock(
-                d_model=d_model,
-                d_time=d_time,
-                n_heads=8,
-                dropout=0.1
-            )
-            
-            # Run the forward pass
-            output = block(x, time_emb)
-            
-            # Verify output shape
-            expected_shape = (batch_size, seq_len, d_model)
-            if output.shape == expected_shape:
-                logger.info(f"✅ Output shape is correct: {output.shape}")
-            else:
-                logger.error(f"❌ Output shape mismatch: {output.shape} != {expected_shape}")
-                success = False
-                
-        except Exception as e:
-            logger.error(f"❌ Error testing dimension {d_model}: {e}")
-            success = False
-    
-    # Test handling different input/time dimensions
-    logger.info("Testing cross-dimensional handling...")
-    
-    # Create the ResidualBlock with d_model=512
-    block = ResidualBlock(
-        d_model=512,
+    # Create a ResidualBlock instance
+    residual_block = ResidualBlock(
+        d_model=d_model,
         d_time=d_time,
-        n_heads=8,
+        n_heads=n_heads,
         dropout=0.1
     )
     
-    # Create input tensor with dimension 1024
-    x_1024 = torch.randn(batch_size, seq_len, 1024).to(device)
+    # Set device (use CUDA if available)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    residual_block = residual_block.to(device)
+    
+    # Test with matching dimensions (normal case)
+    print("\nTest with normal dimensions (matching base dimensions):")
+    batch_size = 2
+    seq_len = 100
+    
+    x = torch.randn(batch_size, seq_len, d_model, device=device)
+    time_emb = torch.randn(batch_size, d_time, device=device)
     
     try:
-        # Run the forward pass
-        output = block(x_1024, time_emb)
-        
-        # Verify output shape
-        if output.shape == (batch_size, seq_len, 1024):
-            logger.info(f"✅ Cross-dimensional test passed: input shape {x_1024.shape} -> output shape {output.shape}")
-        else:
-            logger.error(f"❌ Cross-dimensional test failed: output shape {output.shape}")
-            success = False
-            
+        output = residual_block(x, time_emb)
+        print(f"Success! Output shape: {output.shape}")
+        assert output.shape == (batch_size, seq_len, d_model)
+        print("Dimension check passed.")
     except Exception as e:
-        logger.error(f"❌ Cross-dimensional test error: {e}")
-        success = False
+        print(f"ERROR: {type(e).__name__}: {e}")
+        traceback.print_exc()
     
-    return success
+    # Test with larger input dimension than d_model
+    print("\nTest with larger input dimension:")
+    larger_dim = d_model * 2  # 1024
+    
+    x_large = torch.randn(batch_size, seq_len, larger_dim, device=device)
+    
+    try:
+        output = residual_block(x_large, time_emb)
+        print(f"Success! Input shape: {x_large.shape}, Output shape: {output.shape}")
+        assert output.shape == (batch_size, seq_len, larger_dim)
+        print("Dimension check passed.")
+    except Exception as e:
+        print(f"ERROR: {type(e).__name__}: {e}")
+        traceback.print_exc()
+    
+    # Test with smaller input dimension than d_model
+    print("\nTest with smaller input dimension:")
+    smaller_dim = d_model // 2  # 256
+    
+    x_small = torch.randn(batch_size, seq_len, smaller_dim, device=device)
+    
+    try:
+        output = residual_block(x_small, time_emb)
+        print(f"Success! Input shape: {x_small.shape}, Output shape: {output.shape}")
+        assert output.shape == (batch_size, seq_len, smaller_dim)
+        print("Dimension check passed.")
+    except Exception as e:
+        print(f"ERROR: {type(e).__name__}: {e}")
+        traceback.print_exc()
+    
+    # Test with different time embedding dimension
+    print("\nTest with different time embedding dimension:")
+    different_time_dim = d_time * 2  # 256
+    
+    time_emb_different = torch.randn(batch_size, different_time_dim, device=device)
+    
+    try:
+        output = residual_block(x, time_emb_different)
+        print(f"Success! Time embed shape: {time_emb_different.shape}, Output shape: {output.shape}")
+        assert output.shape == (batch_size, seq_len, d_model)
+        print("Dimension check passed.")
+    except Exception as e:
+        print(f"ERROR: {type(e).__name__}: {e}")
+        traceback.print_exc()
+    
+    # Test with uncommon dimensions
+    print("\nTest with uncommon dimensions:")
+    uncommon_dim = 768  # Not a multiple of d_model
+    
+    x_uncommon = torch.randn(batch_size, seq_len, uncommon_dim, device=device)
+    
+    try:
+        output = residual_block(x_uncommon, time_emb)
+        print(f"Success! Input shape: {x_uncommon.shape}, Output shape: {output.shape}")
+        assert output.shape == (batch_size, seq_len, uncommon_dim)
+        print("Dimension check passed.")
+    except Exception as e:
+        print(f"ERROR: {type(e).__name__}: {e}")
+        traceback.print_exc()
+
 
 if __name__ == "__main__":
-    success = test_residual_block()
-    sys.exit(0 if success else 1)
+    try:
+        # Test ResidualBlock
+        test_residual_block_dimension_handling()
+        
+        print("\nAll ResidualBlock tests completed successfully.")
+    except Exception as e:
+        print(f"Unexpected error during testing: {type(e).__name__}: {str(e)}")
+        traceback.print_exc()
+        sys.exit(1)

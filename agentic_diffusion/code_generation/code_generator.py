@@ -63,17 +63,30 @@ class CodeGenerator:
             code = None
             
             # First try the "generate" method (preferred)
+            # First try the "generate" method (preferred)
             if hasattr(self.diffusion_model, "generate"):
                 try:
                     code = self.diffusion_model.generate(specification, language, partial_code, **generation_kwargs)
-                except (TypeError, ValueError) as e:
+                except (TypeError, ValueError, AssertionError, RuntimeError) as e:
+                    error_str = str(e).lower()
                     print(f"Error in generate method: {e}")
+                    
+                    # Detect dimension mismatch errors with improved pattern matching
+                    if (isinstance(e, AssertionError) and "embedding dimension" in error_str) or \
+                       "dimension" in error_str or "shape" in error_str or "size mismatch" in error_str:
+                        print("Dimension mismatch detected in model. Please ensure CodeUNet is updated to handle dynamic dimensions.")
+                        raise RuntimeError(f"Diffusion model failed due to dimension mismatch: {e}")
+                        
                     # Fallback to simpler method call with fewer arguments
                     try:
                         code = self.diffusion_model.generate(specification, language, partial_code)
                     except Exception as e2:
+                        error_str2 = str(e2).lower()
                         print(f"Fallback generate also failed: {e2}")
-            
+                        
+                        # Still check for dimension issues in the fallback
+                        if "dimension" in error_str2 or "shape" in error_str2 or "size mismatch" in error_str2:
+                            raise RuntimeError(f"Diffusion model failed due to dimension mismatch after fallback attempt: {e2}")
             # If generate didn't work or isn't available, try "sample"
             if code is None and hasattr(self.diffusion_model, "sample"):
                 try:
@@ -88,20 +101,40 @@ class CodeGenerator:
                     else:
                         code = sample_result
                         
-                except (TypeError, ValueError) as e:
+                except (TypeError, ValueError, AssertionError, RuntimeError) as e:
+                    error_str = str(e).lower()
                     print(f"Error in sample method: {e}")
+                    
+                    # Check for dimension issues in sample method
+                    if "dimension" in error_str or "shape" in error_str or "size mismatch" in error_str:
+                        print("Dimension mismatch detected in sampling. Please check model configuration.")
+                        raise RuntimeError(f"Diffusion model sampling failed due to dimension mismatch: {e}")
+                    
                     # Fallback to simpler method call
                     try:
                         code = self.diffusion_model.sample(specification, language, partial_code)
                     except Exception as e2:
+                        error_str2 = str(e2).lower()
                         print(f"Fallback sample also failed: {e2}")
+                        
+                        # Check for dimension issues in fallback
+                        if "dimension" in error_str2 or "shape" in error_str2 or "size mismatch" in error_str2:
+                            raise RuntimeError(f"Diffusion model sampling failed due to dimension mismatch after fallback: {e2}")
             
+            # Validate the generated code
             # Validate the generated code
             if code is None:
                 if iteration == num_iterations - 1:  # Last iteration
-                    raise RuntimeError("Diffusion model failed to generate valid code")
+                    raise RuntimeError("Diffusion model failed to generate valid code - check model compatibility and dimension configurations")
                 continue
-            
+                
+            # Check for empty or whitespace-only code
+            if not code or code.strip() == "":
+                if iteration == num_iterations - 1:  # Last iteration
+                    error_msg = "Diffusion model generated empty code"
+                    print(f"ERROR: {error_msg}")
+                    raise RuntimeError(error_msg)
+                continue
             if not isinstance(code, str):
                 code = str(code)
             

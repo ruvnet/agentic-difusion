@@ -1,0 +1,31 @@
+{
+  "behavior": "success",
+  "with_error_handling": true,
+  "elapsed_time": 0.002567768096923828,
+  "code": "\ndef factorial(n):\n    \"\"\"Calculate the factorial of a number.\"\"\"\n    if n == 0 or n == 1:\n        return 1\n    else:\n        return n * factorial(n-1)\n\ndef main():\n    number = 5\n    result = factorial(number)\n    print(f\"The factorial of {number} is {result}\")\n\nif __name__ == \"__main__\":\n    main()\n",
+  "metadata": {
+    "performance": {
+      "elapsed_time_sec": 0.00040969399924506433,
+      "memory_current_bytes": 479,
+      "memory_peak_bytes": 7723
+    },
+    "quality": {
+      "syntax_score": 1.0,
+      "quality_score": 0.8805000000000002,
+      "relevance_score": 0.707457859239802,
+      "overall_score": 0.8763873577719407,
+      "syntax_correct": true,
+      "complexity": "low"
+    },
+    "generation_parameters": {
+      "language": "python",
+      "batch_size": 1,
+      "precision": "float32",
+      "guidance_scale": 1.5,
+      "temperature": 0.7,
+      "use_rewards": true,
+      "max_length": 512,
+      "num_iterations": 2
+    }
+  }
+}

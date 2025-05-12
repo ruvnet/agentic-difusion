@@ -1,0 +1,29 @@
+{
+  "behavior": "dimension_error",
+  "with_error_handling": true,
+  "elapsed_time": 0.0003116130828857422,
+  "code": null,
+  "metadata": {
+    "performance": {
+      "elapsed_time_sec": 0.00029472999995050486,
+      "memory_current_bytes": 2454,
+      "memory_peak_bytes": 7524
+    },
+    "error": {
+      "type": "RuntimeError",
+      "message": "Diffusion model failed due to dimension mismatch: Embedding dimension mismatch: expected 128 but got 64",
+      "details": "Dimension mismatch detected in the diffusion model. This may be caused by incompatible dimensions in the model's condition blocks. Please update the CodeUNet implementation to handle dynamic dimensions across different layers.",
+      "category": "dimension_mismatch",
+      "suggested_fix": "Check the embedding dimensions in code_unet.py and ensure consistent dimensions across all blocks in the model architecture."
+    },
+    "generation_parameters": {
+      "language": "python",
+      "batch_size": 1,
+      "precision": "float32",
+      "guidance_scale": 1.5,
+      "temperature": 0.7,
+      "max_length": 512,
+      "num_iterations": 2
+    }
+  }
+}

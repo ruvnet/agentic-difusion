@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-Verification script for the fixed code generation pipeline.
+Verification script for the dimension mismatch fix in code generation.
 
-This script tests the code generation with a simple prompt to verify
-the fix for the tensor shape mismatch error in the ResidualBlock.
+This script tests the error handling in the code generation pipeline to verify
+that our fixes properly handle dimension mismatches and provide meaningful error messages.
 """
 
-import argparse
-import logging
-import sys
 import os
-import time
+import sys
+import logging
+import argparse
+import torch
 
-# Set up logging
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -24,150 +24,169 @@ logger = logging.getLogger("verify_code_generation_fix")
 # Add project root to path
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
-sys.path.insert(0, project_root)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-def run_verification(use_mock=False):
-    """Run verification of code generation with the fixed ResidualBlock."""
-    from agentic_diffusion.api.code_generation_api import CodeGenerationAPI
-    from agentic_diffusion.code_generation.code_tokenizer import CodeTokenizer
-    from agentic_diffusion.code_generation.syntax_model import SyntaxModel
-    
-    # Test parameters
-    specification = "Write a function to check if a string is a palindrome"
-    language = "python"
-    
-    if use_mock:
-        logger.info("Using a mock diffusion model for testing")
+def test_fixed_code_generation():
+    """Test the fixed code generation pipeline and verify error handling."""
+    try:
+        logger.info("Loading required modules...")
+        from agentic_diffusion.code_generation.code_tokenizer import CodeTokenizer
+        from agentic_diffusion.code_generation.syntax_model import SyntaxModel
+        from agentic_diffusion.code_generation.code_generator import CodeGenerator
+        from agentic_diffusion.code_generation.diffusion.code_diffusion import CodeDiffusion
+        from agentic_diffusion.code_generation.models.code_unet import CodeUNet
+        from agentic_diffusion.api.code_generation_api import CodeGenerationAPI
         
-        # Import after setting up paths
-        from unittest.mock import MagicMock
+        # Create tokenizer and syntax model
+        logger.info("Creating tokenizer and syntax model...")
+        tokenizer = CodeTokenizer(language="python")
+        syntax_model = SyntaxModel()
         
-        # Create mock output
-        mock_code = '''
-def is_palindrome(s):
-    """
-    Check if a string is a palindrome (reads the same forward and backward).
-    
-    Args:
-        s (str): The string to check
-        
-    Returns:
-        bool: True if the string is a palindrome, False otherwise
-    """
-    # Normalize the string: convert to lowercase and remove non-alphanumeric chars
-    s = ''.join(c.lower() for c in s if c.isalnum())
-    
-    # Check if the string is equal to its reverse
-    return s == s[::-1]
-'''
-        # Create a mock diffusion model
-        mock_diffusion_model = MagicMock()
-        mock_diffusion_model.generate.return_value = mock_code
-        mock_diffusion_model.evaluate_code_quality.return_value = {
-            "syntax_score": 0.95,
-            "quality_score": 0.95,
-            "relevance_score": 0.9,
-            "overall_score": 0.93,
-            "complexity": "low"
-        }
-        
-        # Create API instance with the mock diffusion model
-        api = CodeGenerationAPI(
-            diffusion_model=mock_diffusion_model,
-            config={
-                "default_language": "python",
-                "batch_size": 1,
-                "precision": "float32",
-                "adaptation_type": "hybrid"
-            }
+        # Create minimal code UNet for testing
+        logger.info("Creating minimal CodeUNet...")
+        code_unet = CodeUNet(
+            vocab_size=10000,  # Vocabulary size for tokenizer
+            embedding_dim=256,  # Must match the expected dimension
+            hidden_dim=256,    # Small hidden dimension for testing
+            num_layers=2,      # Minimal layers
+            num_heads=4,       # Minimal attention heads
+            dropout=0.1,
+            condition_dim=256,  # Must match embedding_dim for cross-attention
+            num_downsamples=1  # Minimal downsampling
         )
         
-        try:
-            # Generate code
-            code, metadata = api.generate_code(
-                specification=specification,
-                language=language,
-                custom_parameters={"max_length": 512}
-            )
-            
-            logger.info(f"Successfully generated code with mock")
-            logger.info(f"Generated code snippet:\n{code[:200]}...")
-            quality_metrics = metadata.get("quality", {})
-            if quality_metrics:
-                logger.info(f"Quality metrics: {quality_metrics}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to generate code with mock: {e}")
-            return False
-    else:
-        logger.info("Using the real CodeDiffusion model")
+        # Create diffusion model
+        logger.info("Creating CodeDiffusion model...")
+        diffusion_model = CodeDiffusion(
+            vocab_size=10000,
+            embedding_dim=256,  # Must match CodeUNet's embedding_dim
+            hidden_dim=256,
+            num_layers=2,
+            num_heads=4,
+            dropout=0.1,
+            num_timesteps=100,  # Reduced for testing
+            device="cpu"  # Force CPU for testing
+        )
         
-        # Create a real diffusion model
-        try:
-            from agentic_diffusion.code_generation.diffusion.code_diffusion import CodeDiffusion
-            from agentic_diffusion.code_generation.models.code_unet import CodeUNet
-            
-            # Create a minimal diffusion model
-            tokenizer = CodeTokenizer(language="python")
-            syntax_model = SyntaxModel()
-            
-            # Try to create a minimal diffusion model for testing
-            logger.info("Creating minimal CodeDiffusion model for test")
-            diffusion_model = CodeDiffusion(
-                model=CodeUNet(
-                    d_model=256,  # Use minimal size for testing
-                    num_layers=2,
-                    context_dim=128
-                ),
-                tokenizer=tokenizer,
-                syntax_model=syntax_model
-            )
-            
-            # Create API instance
-            api = CodeGenerationAPI(
-                diffusion_model=diffusion_model,
-                config={
-                    "default_language": "python",
-                    "batch_size": 1,
-                    "precision": "float32",
-                    "adaptation_type": "hybrid"
-                }
-            )
-            
-            start_time = time.time()
-            
-            try:
-                # Generate code
-                code, metadata = api.generate_code(
-                    specification=specification,
-                    language=language,
-                    custom_parameters={
-                        "max_length": 128,  # Smaller for testing
-                        "batch_size": 1,  # Small batch size to avoid OOM
-                        "num_iterations": 1  # Minimal iterations for test
-                    }
-                )
-                
-                elapsed = time.time() - start_time
-                logger.info(f"Successfully generated code in {elapsed:.2f} seconds")
-                quality_metrics = metadata.get("quality", {})
-                if quality_metrics:
-                    logger.info(f"Quality metrics: {quality_metrics}")
-                logger.info(f"Generated code snippet:\n{code[:200]}...")
-                
-                return True
-            except Exception as e:
-                logger.error(f"Failed to generate code with real model: {e}")
-                logger.error(f"Error details: {str(e)}")
-                return False
-        except ImportError as e:
-            logger.error(f"Failed to import required modules: {e}")
+        # Create API with the diffusion model
+        logger.info("Creating CodeGenerationAPI...")
+        api = CodeGenerationAPI(diffusion_model=diffusion_model, config={
+            "batch_size": 1,  # Small batch size for faster testing
+            "num_iterations": 1,
+            "max_length": 64,  # Short max length for testing
+        })
+        
+        # Generate code with a simple prompt
+        prompt = "Write a function that checks if a number is prime"
+        language = "python"
+        
+        logger.info(f"Generating code with prompt: '{prompt}'")
+        
+        # Run with small parameters to make it quick
+        code, metadata = api.generate_code(
+            specification=prompt,
+            language=language
+        )
+        
+        if code:
+            logger.info("Successfully generated code")
+            logger.info("Generated code snippet:")
+            print(code)
+            return True
+        else:
+            if metadata and "error" in metadata:
+                logger.error(f"Code generation failed with error: {metadata['error']['message']}")
+                logger.error(f"Error details: {metadata['error']['details']}")
+            else:
+                logger.error("Code generation returned empty result without error metadata")
             return False
+    
+    except Exception as e:
+        logger.error(f"Unexpected error during test: {e}")
+        # Print full stack trace for debugging
+        import traceback
+        traceback.print_exc()
+        return False
+
+def test_error_handling():
+    """Test the error handling specifically with a misconfigured model."""
+    try:
+        logger.info("Testing error handling with mismatched dimensions...")
+        from agentic_diffusion.code_generation.code_tokenizer import CodeTokenizer
+        from agentic_diffusion.code_generation.syntax_model import SyntaxModel
+        from agentic_diffusion.code_generation.code_generator import CodeGenerator
+        from agentic_diffusion.code_generation.diffusion.code_diffusion import CodeDiffusion
+        from agentic_diffusion.api.code_generation_api import CodeGenerationAPI
+        
+        # Create tokenizer and syntax model
+        tokenizer = CodeTokenizer(language="python")
+        syntax_model = SyntaxModel()
+        
+        # Create diffusion model with deliberately mismatched dimensions
+        # This should trigger our error handling
+        diffusion_model = CodeDiffusion(
+            vocab_size=10000,
+            embedding_dim=256,
+            hidden_dim=256,
+            num_layers=3,  # More layers to cause potential dimension issues
+            num_heads=4,
+            dropout=0.1,
+            num_timesteps=50,
+            device="cpu"
+        )
+        
+        # Create API
+        api = CodeGenerationAPI(diffusion_model=diffusion_model)
+        
+        # Try to generate code which might trigger errors
+        prompt = "Write a recursive function"
+        
+        try:
+            code, metadata = api.generate_code(
+                specification=prompt,
+                language="python"
+            )
+            
+            if code is None and metadata and "error" in metadata:
+                logger.info("Successfully detected error and provided metadata:")
+                logger.info(f"Error type: {metadata['error']['type']}")
+                logger.info(f"Error message: {metadata['error']['message']}")
+                logger.info(f"Error details: {metadata['error']['details']}")
+                return True
+            else:
+                logger.warning("No error detected or properly handled")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Unexpected exception not properly handled: {e}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error setting up error handling test: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Verify code generation with fix")
-    parser.add_argument("--mock", action="store_true", help="Use mock diffusion model")
+    parser = argparse.ArgumentParser(description="Verify fixes to code generation error handling")
+    parser.add_argument("--test-type", choices=["fixed", "error-handling", "both"], 
+                        default="both", help="Type of test to run")
     args = parser.parse_args()
     
-    success = run_verification(use_mock=args.mock)
-    sys.exit(0 if success else 1)
+    success = True
+    
+    if args.test_type in ["fixed", "both"]:
+        logger.info("Running test with fixed code generation...")
+        success = test_fixed_code_generation() and success
+        
+    if args.test_type in ["error-handling", "both"]:
+        logger.info("Running error handling test...")
+        success = test_error_handling() and success
+    
+    if success:
+        logger.info("All tests completed successfully!")
+        sys.exit(0)
+    else:
+        logger.error("One or more tests failed")
+        sys.exit(1)

@@ -154,10 +154,80 @@ class CodeGenerationAPI:
         start_time = time.perf_counter()
         tracemalloc.start()
         
-        # Generate code
-        code = self.code_generator.generate_code(**params)
-        
-        # Capture performance metrics
+        # Generate code with proper error handling
+        try:
+            code = self.code_generator.generate_code(**params)
+        except Exception as e:
+            # Stop memory tracking
+            current, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+            elapsed = time.perf_counter() - start_time
+            
+            # Determine error type and create detailed metadata
+            error_type = type(e).__name__
+            error_msg = str(e).lower()
+            
+            # Create error metadata with more detailed information
+            error_metadata = {
+                "performance": {
+                    "elapsed_time_sec": elapsed,
+                    "memory_current_bytes": current,
+                    "memory_peak_bytes": peak
+                },
+                "error": {
+                    "type": error_type,
+                    "message": str(e),
+                    "details": "Code generation failed with an error. This may be due to model issues or invalid input."
+                },
+                "generation_parameters": {
+                    "language": language or self.tokenizer.language,
+                    "batch_size": params["batch_size"],
+                    "precision": params["precision"],
+                    "guidance_scale": params["guidance_scale"],
+                    "temperature": params["temperature"],
+                    "max_length": params["max_length"],
+                    "num_iterations": params["num_iterations"]
+                }
+            }
+            
+            # Provide more specific error details based on error message patterns
+            if "dimension mismatch" in error_msg or "shape" in error_msg or "size mismatch" in error_msg:
+                error_metadata["error"]["category"] = "dimension_mismatch"
+                error_metadata["error"]["details"] = (
+                    "Dimension mismatch detected in the diffusion model. This may be caused by incompatible "
+                    "dimensions in the model's condition blocks. Please update the CodeUNet implementation "
+                    "to handle dynamic dimensions across different layers."
+                )
+                error_metadata["error"]["suggested_fix"] = (
+                    "Check the embedding dimensions in code_unet.py and ensure consistent dimensions "
+                    "across all blocks in the model architecture."
+                )
+            elif "empty code" in error_msg:
+                error_metadata["error"]["category"] = "empty_output"
+                error_metadata["error"]["details"] = (
+                    "The diffusion model generated empty code. This may be due to insufficient "
+                    "training or incorrect configuration parameters."
+                )
+                error_metadata["error"]["suggested_fix"] = (
+                    "Try adjusting temperature or guidance_scale parameters to improve generation quality."
+                )
+            elif "failed to generate valid code" in error_msg:
+                error_metadata["error"]["category"] = "generation_failure"
+                error_metadata["error"]["details"] = (
+                    "The diffusion model failed to generate valid code after maximum attempts. "
+                    "This may indicate issues with model compatibility or configuration."
+                )
+                error_metadata["error"]["suggested_fix"] = (
+                    "Check for model compatibility issues and verify the input specification is valid."
+                )
+            
+            # Log the detailed error
+            print(f"Code generation error: {error_type} - {str(e)}")
+            print(f"Error details: {error_metadata['error']['details']}")
+                
+            return None, error_metadata
+            
+        # Capture performance metrics for successful generation
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
         elapsed = time.perf_counter() - start_time
